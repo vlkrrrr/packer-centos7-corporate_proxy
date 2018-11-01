@@ -1,0 +1,84 @@
+{
+  "variables": {
+    "file": "CentOS-7-x86_64-Minimal-1804.iso",
+    "checksum": "714acc0aefb32b7d51b515e25546835e55a90da9fb00417fbee2d03a62801efd",
+    "type": "sha256",
+    "non_gui": "false",
+    "http_proxy":"",
+    "https_proxy" :""
+  },
+  "sensitive-variables": ["http_proxy", "https_proxy"],
+
+  "builders": [
+    {
+      "type": "virtualbox-iso",
+      "iso_url": "{{ user `file` }}",
+      "iso_checksum": "{{ user `checksum` }}",
+      "iso_checksum_type": "sha256",
+      "headless": "{{ user `non_gui` }}",
+      "output_directory": "builds",
+      "vm_name": "CentOS7_to_Vagrant",
+      "guest_os_type": "RedHat_64",
+      "disk_size": "8240",
+      "vboxmanage": [
+        ["modifyvm", "{{.Name}}", "--memory", "2048"],
+        ["modifyvm", "{{.Name}}", "--cpus", "1"],
+        ["modifyvm", "{{.Name}}", "--audio", "none"],
+        ["modifyvm", "{{.Name}}", "--usb", "off"]
+      ],
+      "http_directory": "src",
+      "boot_wait": "5s",
+      "boot_command": [
+        "<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg<enter><wait>"
+      ],
+      "ssh_username": "vagrant",
+      "ssh_password": "vagrant",
+      "ssh_port": 22,
+      "ssh_wait_timeout": "600s",
+      "guest_additions_path": "disable",
+      "shutdown_command": "sudo shutdown -h 0"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "file",
+      "source": "secrets/l.ssl.fastly.net.crt",
+      "destination": "/tmp/l.ssl.fastly.net.crt"
+    },    
+    {
+      "type": "file",
+      "source": "secrets/proxy.kvhh.de.crt",
+      "destination": "/tmp/proxy.kvhh.de.crt"
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "sudo mv /tmp/proxy.kvhh.de.crt /etc/pki/ca-trust/source/anchors/",
+        "sudo mv /tmp/l.ssl.fastly.net.crt /etc/pki/ca-trust/source/anchors/",
+        "sudo update-ca-trust",
+        "echo \"http_proxy=\\\"{{user `http_proxy`}}\\\"\" | sudo tee -a /etc/environment > /dev/null",
+        "echo \"https_proxy=\\\"{{user `https_proxy`}}\\\"\" | sudo tee -a /etc/environment > /dev/null",
+        "sudo sed -i -e \"\\$aDefaults env_keep += \\\"http_proxy https_proxy\\\"\" /etc/sudoers",
+        "sudo mkdir -pm 0700 /home/vagrant/.ssh",
+        "sudo curl -o /home/vagrant/.ssh/authorized_keys https://raw.githubusercontent.com/mitchellh/vagrant/master/keys/vagrant.pub",
+        "sudo chmod 0600 /home/vagrant/.ssh/authorized_keys",
+        "sudo chown -R vagrant:vagrant /home/vagrant/.ssh",
+        "sudo yum update -y",
+        "sudo rm -rf /tmp/*",
+        "sudo rm -f /var/log/wtmp /var/log/btmp ",
+        "sudo yum clean all",
+        "sudo rm -rf /var/cache/* /usr/share/doc/*",
+        "rm -f .bash_history",
+        "history -c"
+      ]
+    }
+  ],
+  "post-processors": [
+    {
+      "type": "vagrant",
+      "keep_input_artifact": false,
+      "compression_level": 9,
+      "output": "target/{{.Provider}}-CentOS-7.box"
+    }
+  ]
+}
